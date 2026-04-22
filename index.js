@@ -2,10 +2,13 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, RE
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1496488130549911652"; // 🔴 CHANGE THIS
+const CLIENT_ID = "1496488130549911652";
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers
+    ]
 });
 
 let data = { boards: {} };
@@ -18,13 +21,9 @@ function saveData() {
     fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
-// SORT
 function getSorted(board) {
     return Object.entries(board.leaderboard)
-        .sort((a, b) => {
-            if (b[1] === a[1]) return 0;
-            return b[1] - a[1];
-        })
+        .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 }
 
@@ -52,8 +51,10 @@ function createEmbed(boardName) {
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// ROLE SYSTEM
+// 🔥 FIXED ROLE SYSTEM
 async function updateRoles(guild, board) {
+    await guild.members.fetch(); // ⭐ THIS WAS MISSING
+
     const roles = {
         first: guild.roles.cache.find(r => r.name === "🥇 First Place"),
         second: guild.roles.cache.find(r => r.name === "🥈 Second Place"),
@@ -71,7 +72,7 @@ async function updateRoles(guild, board) {
 
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
-        const member = await guild.members.fetch(userId).catch(()=>null);
+        const member = guild.members.cache.get(userId);
         if (!member) continue;
 
         if (i === 0) await member.roles.add(roles.first).catch(()=>{});
@@ -81,14 +82,13 @@ async function updateRoles(guild, board) {
     }
 }
 
-// ✅ FIXED COMMANDS (THIS WAS YOUR CRASH)
 const commands = [
     new SlashCommandBuilder()
         .setName('createboard')
         .setDescription('Create a leaderboard')
         .addStringOption(o =>
             o.setName('name')
-                .setDescription('Leaderboard name') // 🔥 REQUIRED
+                .setDescription('Leaderboard name')
                 .setRequired(true)
         ),
 
@@ -97,17 +97,17 @@ const commands = [
         .setDescription('Add or remove wins')
         .addStringOption(o =>
             o.setName('board')
-                .setDescription('Board name') // 🔥 REQUIRED
+                .setDescription('Board name')
                 .setRequired(true)
         )
         .addUserOption(o =>
             o.setName('player')
-                .setDescription('Player to update') // 🔥 REQUIRED
+                .setDescription('Player')
                 .setRequired(true)
         )
         .addIntegerOption(o =>
             o.setName('amount')
-                .setDescription('Wins (+ or -)') // 🔥 REQUIRED
+                .setDescription('Wins (+ or -)')
                 .setRequired(true)
         ),
 
@@ -116,7 +116,7 @@ const commands = [
         .setDescription('Delete a leaderboard')
         .addStringOption(o =>
             o.setName('name')
-                .setDescription('Board name') // 🔥 REQUIRED
+                .setDescription('Board name')
                 .setRequired(true)
         )
 ];
@@ -170,7 +170,7 @@ client.on('interactionCreate', async interaction => {
         saveData();
 
         await interaction.reply({
-            content: `✅ Updated ${player.username} (${amount >= 0 ? "+" : ""}${amount})`,
+            content: `✅ Updated ${player.username}`,
             ephemeral: true
         });
 
