@@ -8,7 +8,7 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-let data = { leaderboard: {}, messageId: null };
+let data = { boards: {} };
 
 if (fs.existsSync('data.json')) {
     data = JSON.parse(fs.readFileSync('data.json'));
@@ -18,8 +18,10 @@ function saveData() {
     fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
-function createEmbed() {
-    const sorted = Object.entries(data.leaderboard)
+function createEmbed(boardName) {
+    const board = data.boards[boardName] || { leaderboard: {} };
+
+    const sorted = Object.entries(board.leaderboard)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 
@@ -38,24 +40,29 @@ function createEmbed() {
 
     return new EmbedBuilder()
         .setColor(0xFFD700)
-        .setTitle('🏆 TOURNAMENT LEADERBOARD 🏆')
-        .setDescription(
-            '──────────────\n' +
-            '**TOURNAMENT LEADERBOARD**\n' +
-            '──────────────\n\n' +
-            desc
-        )
-        .setFooter({ text: "Rocket League Tournament" });
+        .setTitle(`🏆 ${boardName.toUpperCase()} 🏆`)
+        .setDescription(desc)
+        .setFooter({ text: "Tournament System" });
 }
 
 const commands = [
     new SlashCommandBuilder()
-        .setName('leaderboardcreate')
-        .setDescription('Create leaderboard'),
+        .setName('createboard')
+        .setDescription('Create a leaderboard')
+        .addStringOption(option =>
+            option.setName('name')
+                .setDescription('Board name')
+                .setRequired(true)
+        ),
 
     new SlashCommandBuilder()
         .setName('add')
         .setDescription('Add wins')
+        .addStringOption(option =>
+            option.setName('board')
+                .setDescription('Board name')
+                .setRequired(true)
+        )
         .addUserOption(option =>
             option.setName('player')
                 .setDescription('Player')
@@ -63,7 +70,16 @@ const commands = [
         )
         .addIntegerOption(option =>
             option.setName('amount')
-                .setDescription('Wins to add')
+                .setDescription('Wins')
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName('deleteboard')
+        .setDescription('Delete leaderboard')
+        .addStringOption(option =>
+            option.setName('board')
+                .setDescription('Board name')
                 .setRequired(true)
         )
 ];
@@ -71,43 +87,65 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
-    try {
-        await rest.put(
-            Routes.applicationCommands(CLIENT_ID),
-            { body: commands }
-        );
-        console.log("Commands registered");
-    } catch (error) {
-        console.error(error);
-    }
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    console.log("Commands loaded");
 })();
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    if (interaction.commandName === 'leaderboardcreate') {
-        const embed = createEmbed();
-        const msg = await interaction.reply({ embeds: [embed], fetchReply: true });
-        data.messageId = msg.id;
+    if (interaction.commandName === 'createboard') {
+        const name = interaction.options.getString('name');
+
+        if (data.boards[name]) {
+            return interaction.reply({ content: "Board already exists", ephemeral: true });
+        }
+
+        data.boards[name] = { leaderboard: {}, messageId: null };
+
+        const msg = await interaction.reply({
+            embeds: [createEmbed(name)],
+            fetchReply: true
+        });
+
+        data.boards[name].messageId = msg.id;
         saveData();
     }
 
     if (interaction.commandName === 'add') {
+        const boardName = interaction.options.getString('board');
         const user = interaction.options.getUser('player');
         const amount = interaction.options.getInteger('amount');
 
-        if (!data.leaderboard[user.id]) data.leaderboard[user.id] = 0;
-        data.leaderboard[user.id] += amount;
+        const board = data.boards[boardName];
+        if (!board) {
+            return interaction.reply({ content: "Board not found", ephemeral: true });
+        }
+
+        if (!board.leaderboard[user.id]) board.leaderboard[user.id] = 0;
+        board.leaderboard[user.id] += amount;
 
         saveData();
 
         try {
-            const channel = interaction.channel;
-            const msg = await channel.messages.fetch(data.messageId);
-            await msg.edit({ embeds: [createEmbed()] });
+            const msg = await interaction.channel.messages.fetch(board.messageId);
+            await msg.edit({ embeds: [createEmbed(boardName)] });
         } catch {}
 
         await interaction.reply({ content: "Updated!", ephemeral: true });
+    }
+
+    if (interaction.commandName === 'deleteboard') {
+        const boardName = interaction.options.getString('board');
+
+        if (!data.boards[boardName]) {
+            return interaction.reply({ content: "Board not found", ephemeral: true });
+        }
+
+        delete data.boards[boardName];
+        saveData();
+
+        await interaction.reply({ content: `Deleted ${boardName}`, ephemeral: true });
     }
 });
 
