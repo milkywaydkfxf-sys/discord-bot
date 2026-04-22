@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, RE
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "PASTE_CLIENT_ID_HERE"; // 🔴 CHANGE THIS
+const CLIENT_ID = "1496488130549911652"; // 🔴 CHANGE THIS
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
