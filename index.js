@@ -28,7 +28,7 @@ function createEmbed(boardName) {
     let desc = "";
 
     sorted.forEach((user, i) => {
-        let medal = "🏅";
+        let medal = "🎖️";
         if (i === 0) medal = "🥇";
         if (i === 1) medal = "🥈";
         if (i === 2) medal = "🥉";
@@ -40,8 +40,8 @@ function createEmbed(boardName) {
 
     return new EmbedBuilder()
         .setColor(0xFFD700)
-        .setTitle(boardName) // ✅ USE EXACT NAME YOU TYPE
-        .setDescription('\n' + desc)
+        .setTitle(boardName)
+        .setDescription(desc)
         .setFooter({ text: "Rocket League Tournament" });
 }
 
@@ -51,16 +51,16 @@ const commands = [
         .setDescription('Create leaderboard')
         .addStringOption(option =>
             option.setName('name')
-                .setDescription('Write EXACT title you want')
+                .setDescription('Leaderboard name')
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName('add')
-        .setDescription('Add wins')
+        .setDescription('Add or remove wins')
         .addStringOption(option =>
             option.setName('board')
-                .setDescription('Paste same name you used')
+                .setDescription('Board name')
                 .setRequired(true)
         )
         .addUserOption(option =>
@@ -70,7 +70,7 @@ const commands = [
         )
         .addIntegerOption(option =>
             option.setName('amount')
-                .setDescription('Wins')
+                .setDescription('Wins (+ or -)')
                 .setRequired(true)
         ),
 
@@ -78,7 +78,7 @@ const commands = [
         .setName('deleteboard')
         .setDescription('Delete leaderboard')
         .addStringOption(option =>
-            option.setName('board')
+            option.setName('name')
                 .setDescription('Board name')
                 .setRequired(true)
         )
@@ -87,8 +87,14 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log("Commands loaded");
+    try {
+        await rest.put(
+            Routes.applicationCommands(CLIENT_ID),
+            { body: commands },
+        );
+    } catch (error) {
+        console.error(error);
+    }
 })();
 
 client.on('interactionCreate', async interaction => {
@@ -98,59 +104,81 @@ client.on('interactionCreate', async interaction => {
         const name = interaction.options.getString('name');
 
         if (data.boards[name]) {
-            return interaction.reply({ content: "Board already exists", ephemeral: true });
+            return interaction.reply({ content: "❌ Board already exists", ephemeral: true });
         }
 
-        data.boards[name] = { leaderboard: {}, messageId: null };
+        data.boards[name] = {
+            leaderboard: {},
+            messageId: null
+        };
 
-        const msg = await interaction.reply({
-            embeds: [createEmbed(name)],
-            fetchReply: true
+        saveData();
+
+        const msg = await interaction.channel.send({
+            embeds: [createEmbed(name)]
         });
 
         data.boards[name].messageId = msg.id;
         saveData();
+
+        await interaction.reply({ content: "✅ Leaderboard created", ephemeral: true });
     }
 
     if (interaction.commandName === 'add') {
         const boardName = interaction.options.getString('board');
-        const user = interaction.options.getUser('player');
+        const player = interaction.options.getUser('player');
         const amount = interaction.options.getInteger('amount');
 
-        const board = data.boards[boardName];
-        if (!board) {
-            return interaction.reply({ content: "Board not found (copy name EXACTLY)", ephemeral: true });
+        if (!data.boards[boardName]) {
+            return interaction.reply({ content: "❌ Board not found", ephemeral: true });
         }
 
-        if (!board.leaderboard[user.id]) board.leaderboard[user.id] = 0;
-        board.leaderboard[user.id] += amount;
+        const board = data.boards[boardName];
+
+        if (!board.leaderboard[player.id]) {
+            board.leaderboard[player.id] = 0;
+        }
+
+        board.leaderboard[player.id] += amount;
+
+        // 🔥 REMOVE PLAYER IF 0 OR LESS
+        if (board.leaderboard[player.id] <= 0) {
+            delete board.leaderboard[player.id];
+        }
 
         saveData();
 
-        try {
-            const msg = await interaction.channel.messages.fetch(board.messageId);
-            await msg.edit({ embeds: [createEmbed(boardName)] });
-        } catch {}
+        await interaction.reply({
+            content: `✅ Updated ${player.username} (${amount >= 0 ? "+" : ""}${amount})`,
+            ephemeral: true
+        });
 
-        await interaction.reply({ content: "Updated!", ephemeral: true });
+        if (board.messageId) {
+            const channel = interaction.channel;
+            const msg = await channel.messages.fetch(board.messageId);
+            msg.edit({ embeds: [createEmbed(boardName)] });
+        }
     }
 
     if (interaction.commandName === 'deleteboard') {
-        const boardName = interaction.options.getString('board');
+        const name = interaction.options.getString('name');
 
-        if (!data.boards[boardName]) {
-            return interaction.reply({ content: "Board not found", ephemeral: true });
+        if (!data.boards[name]) {
+            return interaction.reply({ content: "❌ Board not found", ephemeral: true });
         }
 
-        delete data.boards[boardName];
+        const board = data.boards[name];
+
+        try {
+            const msg = await interaction.channel.messages.fetch(board.messageId);
+            await msg.delete();
+        } catch {}
+
+        delete data.boards[name];
         saveData();
 
-        await interaction.reply({ content: `Deleted ${boardName}`, ephemeral: true });
+        await interaction.reply({ content: "🗑️ Leaderboard deleted", ephemeral: true });
     }
-});
-
-client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}`);
 });
 
 client.login(TOKEN);
