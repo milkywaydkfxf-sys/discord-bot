@@ -51,9 +51,9 @@ function createEmbed(boardName) {
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// 🔥 FIXED ROLE SYSTEM
+// ✅ FIXED ROLE SYSTEM (ONLY TOUCH TOP 10)
 async function updateRoles(guild, board) {
-    await guild.members.fetch(); // ⭐ THIS WAS MISSING
+    await guild.members.fetch();
 
     const roles = {
         first: guild.roles.cache.find(r => r.name === "🥇 First Place"),
@@ -66,10 +66,20 @@ async function updateRoles(guild, board) {
 
     const sorted = getSorted(board);
 
-    for (const member of guild.members.cache.values()) {
-        await member.roles.remove([roles.first, roles.second, roles.third, roles.top10]).catch(()=>{});
+    // REMOVE roles ONLY from people in leaderboard
+    for (const [userId] of sorted) {
+        const member = guild.members.cache.get(userId);
+        if (!member) continue;
+
+        await member.roles.remove([
+            roles.first,
+            roles.second,
+            roles.third,
+            roles.top10
+        ]).catch(()=>{});
     }
 
+    // ADD roles again correctly
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
         const member = guild.members.cache.get(userId);
