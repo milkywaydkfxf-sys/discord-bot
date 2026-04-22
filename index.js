@@ -18,7 +18,7 @@ function saveData() {
     fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
-// SORT (keeps order on ties)
+// SORT
 function getSorted(board) {
     return Object.entries(board.leaderboard)
         .sort((a, b) => {
@@ -52,7 +52,7 @@ function createEmbed(boardName) {
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// 🔥 ROLE SYSTEM (YOUR NAMES)
+// ROLE SYSTEM
 async function updateRoles(guild, board) {
     const roles = {
         first: guild.roles.cache.find(r => r.name === "🥇 First Place"),
@@ -65,12 +65,10 @@ async function updateRoles(guild, board) {
 
     const sorted = getSorted(board);
 
-    // remove all roles first
     for (const member of guild.members.cache.values()) {
         await member.roles.remove([roles.first, roles.second, roles.third, roles.top10]).catch(()=>{});
     }
 
-    // assign roles
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
         const member = await guild.members.fetch(userId).catch(()=>null);
@@ -83,23 +81,44 @@ async function updateRoles(guild, board) {
     }
 }
 
+// ✅ FIXED COMMANDS (THIS WAS YOUR CRASH)
 const commands = [
     new SlashCommandBuilder()
         .setName('createboard')
-        .setDescription('Create leaderboard')
-        .addStringOption(o => o.setName('name').setDescription('Name').setRequired(true)),
+        .setDescription('Create a leaderboard')
+        .addStringOption(o =>
+            o.setName('name')
+                .setDescription('Leaderboard name') // 🔥 REQUIRED
+                .setRequired(true)
+        ),
 
     new SlashCommandBuilder()
         .setName('add')
-        .setDescription('Add/remove wins')
-        .addStringOption(o => o.setName('board').setRequired(true))
-        .addUserOption(o => o.setName('player').setRequired(true))
-        .addIntegerOption(o => o.setName('amount').setRequired(true)),
+        .setDescription('Add or remove wins')
+        .addStringOption(o =>
+            o.setName('board')
+                .setDescription('Board name') // 🔥 REQUIRED
+                .setRequired(true)
+        )
+        .addUserOption(o =>
+            o.setName('player')
+                .setDescription('Player to update') // 🔥 REQUIRED
+                .setRequired(true)
+        )
+        .addIntegerOption(o =>
+            o.setName('amount')
+                .setDescription('Wins (+ or -)') // 🔥 REQUIRED
+                .setRequired(true)
+        ),
 
     new SlashCommandBuilder()
         .setName('deleteboard')
-        .setDescription('Delete board')
-        .addStringOption(o => o.setName('name').setRequired(true))
+        .setDescription('Delete a leaderboard')
+        .addStringOption(o =>
+            o.setName('name')
+                .setDescription('Board name') // 🔥 REQUIRED
+                .setRequired(true)
+        )
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -160,21 +179,16 @@ client.on('interactionCreate', async interaction => {
             msg.edit({ embeds: [createEmbed(boardName)] });
         }
 
-        // 🔥 UPDATE ROLES HERE
         await updateRoles(interaction.guild, board);
     }
 
     if (interaction.commandName === 'deleteboard') {
         const name = interaction.options.getString('name');
 
-        if (!data.boards[name]) {
-            return interaction.reply({ content: "❌ Board not found", ephemeral: true });
-        }
-
         delete data.boards[name];
         saveData();
 
-        await interaction.reply({ content: "🗑️ Leaderboard deleted", ephemeral: true });
+        await interaction.reply({ content: "🗑️ Deleted", ephemeral: true });
     }
 });
 
