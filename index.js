@@ -7,10 +7,7 @@ const CLIENT_ID = "1496488130549911652";
 const MAIN_BOARD = "🏆 TOURNAMENT LEADERBOARD 🏆";
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 let data = { boards: {} };
@@ -53,7 +50,7 @@ function createEmbed(boardName) {
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// 🔥 FIXED ROLE SYSTEM
+// 🔥 FIXED ROLE SYSTEM (NO MASS REMOVE)
 async function updateRoles(guild, boardName) {
     if (boardName !== MAIN_BOARD) return;
 
@@ -69,11 +66,13 @@ async function updateRoles(guild, boardName) {
 
     if (!roles.first || !roles.second || !roles.third || !roles.top10) return;
 
-    // 🔥 FORCE LOAD MEMBERS
     await guild.members.fetch();
 
-    // remove roles from everyone
-    for (const member of guild.members.cache.values()) {
+    // clear ONLY leaderboard players
+    for (const [userId] of Object.entries(board.leaderboard)) {
+        const member = guild.members.cache.get(userId);
+        if (!member) continue;
+
         await member.roles.remove([
             roles.first,
             roles.second,
@@ -82,7 +81,7 @@ async function updateRoles(guild, boardName) {
         ]).catch(()=>{});
     }
 
-    // give roles to top players
+    // give roles
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
         const member = guild.members.cache.get(userId);
