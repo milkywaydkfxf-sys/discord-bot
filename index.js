@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, RE
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1496488130549911652";
+const CLIENT_ID = "PASTE_CLIENT_ID_HERE";
 
 const MAIN_BOARD = "🏆 TOURNAMENT LEADERBOARD 🏆";
 
