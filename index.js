@@ -2,12 +2,15 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, RE
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1496488130549911652"; // 🔴 CHANGE THIS
+const CLIENT_ID = "1496488130549911652";
 
 const MAIN_BOARD = "🏆 TOURNAMENT LEADERBOARD 🏆";
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers
+    ]
 });
 
 let data = { boards: {} };
@@ -20,14 +23,12 @@ function saveData() {
     fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
-// SORT
 function getSorted(board) {
     return Object.entries(board.leaderboard)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 }
 
-// EMBED
 function createEmbed(boardName) {
     const board = data.boards[boardName] || { leaderboard: {} };
     const sorted = getSorted(board);
@@ -52,7 +53,7 @@ function createEmbed(boardName) {
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// ROLE SYSTEM (ONLY MAIN BOARD)
+// 🔥 FIXED ROLE SYSTEM
 async function updateRoles(guild, boardName) {
     if (boardName !== MAIN_BOARD) return;
 
@@ -68,13 +69,23 @@ async function updateRoles(guild, boardName) {
 
     if (!roles.first || !roles.second || !roles.third || !roles.top10) return;
 
+    // 🔥 FORCE LOAD MEMBERS
+    await guild.members.fetch();
+
+    // remove roles from everyone
     for (const member of guild.members.cache.values()) {
-        await member.roles.remove([roles.first, roles.second, roles.third, roles.top10]).catch(()=>{});
+        await member.roles.remove([
+            roles.first,
+            roles.second,
+            roles.third,
+            roles.top10
+        ]).catch(()=>{});
     }
 
+    // give roles to top players
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
-        const member = await guild.members.fetch(userId).catch(()=>null);
+        const member = guild.members.cache.get(userId);
         if (!member) continue;
 
         if (i === 0) await member.roles.add(roles.first).catch(()=>{});
@@ -84,23 +95,22 @@ async function updateRoles(guild, boardName) {
     }
 }
 
-// COMMANDS
 const commands = [
     new SlashCommandBuilder()
         .setName('createboard')
-        .setDescription('Create a leaderboard')
+        .setDescription('Create leaderboard')
         .addStringOption(o =>
             o.setName('name')
-                .setDescription('Leaderboard name')
+                .setDescription('Name')
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName('add')
-        .setDescription('Add/remove wins')
+        .setDescription('Add wins')
         .addStringOption(o =>
             o.setName('board')
-                .setDescription('Choose board')
+                .setDescription('Board')
                 .setRequired(true)
                 .setAutocomplete(true)
         )
@@ -111,7 +121,7 @@ const commands = [
         )
         .addIntegerOption(o =>
             o.setName('amount')
-                .setDescription('+ or - wins')
+                .setDescription('Amount')
                 .setRequired(true)
         ),
 
@@ -120,7 +130,7 @@ const commands = [
         .setDescription('Delete leaderboard')
         .addStringOption(o =>
             o.setName('name')
-                .setDescription('Choose board')
+                .setDescription('Board')
                 .setRequired(true)
                 .setAutocomplete(true)
         )
@@ -132,7 +142,6 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
 })();
 
-// AUTOCOMPLETE
 client.on('interactionCreate', async interaction => {
     if (interaction.isAutocomplete()) {
         const focused = interaction.options.getFocused();
@@ -148,11 +157,9 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// COMMAND HANDLER
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // CREATE
     if (interaction.commandName === 'createboard') {
         const name = interaction.options.getString('name');
 
@@ -169,7 +176,6 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: "✅ Created", ephemeral: true });
     }
 
-    // ADD
     if (interaction.commandName === 'add') {
         const boardName = interaction.options.getString('board');
         const player = interaction.options.getUser('player');
@@ -193,10 +199,7 @@ client.on('interactionCreate', async interaction => {
 
         saveData();
 
-        await interaction.reply({
-            content: `✅ Updated ${player.username}`,
-            ephemeral: true
-        });
+        await interaction.reply({ content: "✅ Updated", ephemeral: true });
 
         if (board.messageId) {
             const msg = await interaction.channel.messages.fetch(board.messageId);
@@ -206,7 +209,6 @@ client.on('interactionCreate', async interaction => {
         await updateRoles(interaction.guild, boardName);
     }
 
-    // DELETE
     if (interaction.commandName === 'deleteboard') {
         const name = interaction.options.getString('name');
 
