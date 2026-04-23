@@ -2,13 +2,12 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, RE
 const fs = require('fs');
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1496488130549911652";
+const CLIENT_ID = "1496488130549911652"; // 🔴 CHANGE THIS
+
+const MAIN_BOARD = "🏆 TOURNAMENT LEADERBOARD 🏆";
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 let data = { boards: {} };
@@ -21,12 +20,14 @@ function saveData() {
     fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
+// SORT
 function getSorted(board) {
     return Object.entries(board.leaderboard)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 }
 
+// EMBED
 function createEmbed(boardName) {
     const board = data.boards[boardName] || { leaderboard: {} };
     const sorted = getSorted(board);
@@ -46,14 +47,17 @@ function createEmbed(boardName) {
 
     return new EmbedBuilder()
         .setColor(0xFFD700)
-        .setTitle("🏆 TOURNAMENT LEADERBOARD 🏆")
+        .setTitle(boardName)
         .setDescription(desc)
         .setFooter({ text: "Rocket League Tournament" });
 }
 
-// ✅ FIXED ROLE SYSTEM (ONLY TOUCH TOP 10)
-async function updateRoles(guild, board) {
-    await guild.members.fetch();
+// ROLE SYSTEM (ONLY MAIN BOARD)
+async function updateRoles(guild, boardName) {
+    if (boardName !== MAIN_BOARD) return;
+
+    const board = data.boards[boardName];
+    const sorted = getSorted(board);
 
     const roles = {
         first: guild.roles.cache.find(r => r.name === "🥇 First Place"),
@@ -64,25 +68,13 @@ async function updateRoles(guild, board) {
 
     if (!roles.first || !roles.second || !roles.third || !roles.top10) return;
 
-    const sorted = getSorted(board);
-
-    // REMOVE roles ONLY from people in leaderboard
-    for (const [userId] of sorted) {
-        const member = guild.members.cache.get(userId);
-        if (!member) continue;
-
-        await member.roles.remove([
-            roles.first,
-            roles.second,
-            roles.third,
-            roles.top10
-        ]).catch(()=>{});
+    for (const member of guild.members.cache.values()) {
+        await member.roles.remove([roles.first, roles.second, roles.third, roles.top10]).catch(()=>{});
     }
 
-    // ADD roles again correctly
     for (let i = 0; i < sorted.length; i++) {
         const userId = sorted[i][0];
-        const member = guild.members.cache.get(userId);
+        const member = await guild.members.fetch(userId).catch(()=>null);
         if (!member) continue;
 
         if (i === 0) await member.roles.add(roles.first).catch(()=>{});
@@ -92,6 +84,7 @@ async function updateRoles(guild, board) {
     }
 }
 
+// COMMANDS
 const commands = [
     new SlashCommandBuilder()
         .setName('createboard')
@@ -104,11 +97,12 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName('add')
-        .setDescription('Add or remove wins')
+        .setDescription('Add/remove wins')
         .addStringOption(o =>
             o.setName('board')
-                .setDescription('Board name')
+                .setDescription('Choose board')
                 .setRequired(true)
+                .setAutocomplete(true)
         )
         .addUserOption(o =>
             o.setName('player')
@@ -117,17 +111,18 @@ const commands = [
         )
         .addIntegerOption(o =>
             o.setName('amount')
-                .setDescription('Wins (+ or -)')
+                .setDescription('+ or - wins')
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName('deleteboard')
-        .setDescription('Delete a leaderboard')
+        .setDescription('Delete leaderboard')
         .addStringOption(o =>
             o.setName('name')
-                .setDescription('Board name')
+                .setDescription('Choose board')
                 .setRequired(true)
+                .setAutocomplete(true)
         )
 ];
 
@@ -137,9 +132,27 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
 })();
 
+// AUTOCOMPLETE
+client.on('interactionCreate', async interaction => {
+    if (interaction.isAutocomplete()) {
+        const focused = interaction.options.getFocused();
+        const choices = Object.keys(data.boards);
+
+        const filtered = choices
+            .filter(c => c.toLowerCase().includes(focused.toLowerCase()))
+            .slice(0, 25);
+
+        await interaction.respond(
+            filtered.map(choice => ({ name: choice, value: choice }))
+        );
+    }
+});
+
+// COMMAND HANDLER
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // CREATE
     if (interaction.commandName === 'createboard') {
         const name = interaction.options.getString('name');
 
@@ -153,9 +166,10 @@ client.on('interactionCreate', async interaction => {
         data.boards[name].messageId = msg.id;
         saveData();
 
-        await interaction.reply({ content: "✅ Leaderboard created", ephemeral: true });
+        return interaction.reply({ content: "✅ Created", ephemeral: true });
     }
 
+    // ADD
     if (interaction.commandName === 'add') {
         const boardName = interaction.options.getString('board');
         const player = interaction.options.getUser('player');
@@ -189,16 +203,17 @@ client.on('interactionCreate', async interaction => {
             msg.edit({ embeds: [createEmbed(boardName)] });
         }
 
-        await updateRoles(interaction.guild, board);
+        await updateRoles(interaction.guild, boardName);
     }
 
+    // DELETE
     if (interaction.commandName === 'deleteboard') {
         const name = interaction.options.getString('name');
 
         delete data.boards[name];
         saveData();
 
-        await interaction.reply({ content: "🗑️ Deleted", ephemeral: true });
+        return interaction.reply({ content: "🗑️ Deleted", ephemeral: true });
     }
 });
 
